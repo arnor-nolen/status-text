@@ -5,7 +5,8 @@ Checks: >
   -google-readability-todo,
   -google-runtime-references,
   -llvm-header-guard,-llvmlibc-*,
-  -altera-struct-pack-align
+  -altera-struct-pack-align,
+  -altera-unroll-loops
 WarningsAsErrors: ''
 HeaderFilterRegex: ''
 FormatStyle:     none

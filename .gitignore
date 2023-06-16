@@ -1,3 +1,10 @@
+config.h
+status-text
+
+# C code analysis
+.cache
+compile_commands.json
+
 # Prerequisites
 *.d
 

@@ -1,0 +1,11 @@
+---
+Checks: >
+  *,
+  -fuchsia-*,
+  -google-readability-todo,
+  -google-runtime-references,
+  -llvm-header-guard,-llvmlibc-*,
+  -altera-struct-pack-align
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+FormatStyle:     none

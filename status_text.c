@@ -3,7 +3,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/wait.h>
-#include <unistd.h>
+#include <time.h>
 
 #define MAX_STRING_SIZE 1024
 
@@ -18,10 +18,17 @@ typedef struct {
 } subprocess_t;
 
 typedef struct {
+    timer_t timer;
+    struct itimerspec timerspec;
+    struct sigevent sigevent;
+} event_t;
+
+typedef struct {
     const char *command;
     int period;
     subprocess_t subprocess;
     output_t output;
+    event_t event;
 } task_t;
 
 #include "config.h"
@@ -44,6 +51,8 @@ subprocess_t subprocess(const char *command) {
 
     return process;
 }
+
+void timer_callback(int signum) { printf("Signal %d caught.\n", signum); }
 
 int main(int argc, char *argv[]) {
     (void)(argc);
@@ -76,6 +85,22 @@ int main(int argc, char *argv[]) {
         task_list[i].output.size = bytes;
 
         close(task_list[i].subprocess.readfd);
+
+        task_list[i].event.timerspec.it_value.tv_sec = task_list[i].period;
+        task_list[i].event.timerspec.it_interval.tv_sec = task_list[i].period;
+
+        task_list[i].event.sigevent.sigev_notify = SIGEV_SIGNAL;
+        task_list[i].event.sigevent.sigev_signo = SIGRTMIN + i;
+        task_list[i].event.sigevent.sigev_value.sival_ptr =
+            &task_list[i].event.timerspec;
+
+        if (timer_create(CLOCK_REALTIME, &task_list[i].event.sigevent,
+                         &task_list[i].event.timer) == 0) {
+            timer_settime(task_list[i].event.timer, 0,
+                          &task_list[i].event.timerspec, NULL);
+        }
+
+        (void)signal(SIGRTMIN + i, &timer_callback);
     }
 
     printf("%s\n", status_string);
@@ -83,6 +108,10 @@ int main(int argc, char *argv[]) {
     for (size_t i = 0U; i != sizeof(task_list) / sizeof(task_list[0]); ++i) {
         int status = 0;
         pid_t pid = waitpid(task_list[i].subprocess.pid, &status, 0);
+    }
+
+    while (1) {
+        pause();
     }
 
     return 0;

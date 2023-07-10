@@ -2,10 +2,11 @@
 
 #include <fcntl.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
 
-#define MAX_STRING_SIZE 1024
+#define LEN(x) (sizeof(x) / sizeof(x[0]))
 
 typedef struct {
     size_t position;
@@ -33,6 +34,10 @@ typedef struct {
 
 #include "config.h"
 
+char status_string[MAX_STRING_SIZE] = "";
+
+sigset_t signal_set;
+
 subprocess_t subprocess(const char *command) {
     int fds[2];
     pipe2(fds, O_CLOEXEC);
@@ -52,40 +57,64 @@ subprocess_t subprocess(const char *command) {
     return process;
 }
 
-void timer_callback(int signum) { printf("Signal %d caught.\n", signum); }
+void timer_callback(int signum) {
+    /* Block all signals from interrupting execution. */
+    sigprocmask(SIG_BLOCK, &signal_set, NULL);
+
+    size_t elem_id = signum - SIGRTMIN;
+
+    task_t *task = &task_list[elem_id];
+    task_t *prev_task = &task_list[elem_id - 1];
+
+    if (elem_id == 0U) {
+        task->output.position = 0;
+    } else {
+        task->output.position =
+            prev_task->output.position + prev_task->output.size - 1;
+    }
+
+    task->subprocess = subprocess(task->command);
+
+    strncpy(status_string + task->output.position, start_delimiter,
+            strlen(start_delimiter));
+
+    size_t str_size = strlen(start_delimiter);
+
+    str_size += read(task->subprocess.readfd,
+                     status_string + task->output.position + str_size,
+                     MAX_STRING_SIZE - task->output.position - str_size);
+
+    strncpy(status_string + task->output.position + str_size - 1, end_delimiter,
+            strlen(end_delimiter));
+
+    str_size += strlen(end_delimiter);
+
+    task->output.size = str_size;
+
+    close(task->subprocess.readfd);
+
+    printf("%s\n", status_string);
+
+    /* Unblock the signals. */
+    sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
+}
 
 int main(int argc, char *argv[]) {
     (void)(argc);
     (void)(argv);
 
-    char status_string[MAX_STRING_SIZE] = "";
+    /* Initialize the signal set. */
+    sigemptyset(&signal_set);
+    for (size_t i = 0U; i != LEN(task_list); ++i) {
+        sigaddset(&signal_set, SIGRTMIN + i);
+    }
 
-    for (size_t i = 0U; i != sizeof(task_list) / sizeof(task_list[0]); ++i) {
-        if (i == 0U) {
-            task_list[i].output.position = 0;
-        } else {
-            task_list[i].output.position = task_list[i - 1].output.position +
-                                           task_list[i - 1].output.size - 1;
-        }
+    /* Turn off stdout buffering. */
+    if (setvbuf(stdout, NULL, _IONBF, 0)) {
+        _exit(1);
+    }
 
-        task_list[i].subprocess = subprocess(task_list[i].command);
-
-        ssize_t bytes =
-            snprintf(status_string + task_list[i].output.position,
-                     MAX_STRING_SIZE - task_list[i].output.position, "[");
-
-        bytes += read(task_list[i].subprocess.readfd,
-                      status_string + task_list[i].output.position + bytes,
-                      MAX_STRING_SIZE - task_list[i].output.position - bytes);
-
-        bytes += snprintf(
-            status_string + task_list[i].output.position + bytes - 1,
-            MAX_STRING_SIZE - task_list[i].output.position - bytes + 1, "]");
-
-        task_list[i].output.size = bytes;
-
-        close(task_list[i].subprocess.readfd);
-
+    for (size_t i = 0U; i != LEN(task_list); ++i) {
         task_list[i].event.timerspec.it_value.tv_sec = task_list[i].period;
         task_list[i].event.timerspec.it_interval.tv_sec = task_list[i].period;
 
@@ -100,14 +129,9 @@ int main(int argc, char *argv[]) {
                           &task_list[i].event.timerspec, NULL);
         }
 
+        timer_callback(SIGRTMIN + i);
+
         (void)signal(SIGRTMIN + i, &timer_callback);
-    }
-
-    printf("%s\n", status_string);
-
-    for (size_t i = 0U; i != sizeof(task_list) / sizeof(task_list[0]); ++i) {
-        int status = 0;
-        pid_t pid = waitpid(task_list[i].subprocess.pid, &status, 0);
     }
 
     while (1) {

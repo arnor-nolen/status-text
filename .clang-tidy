@@ -6,7 +6,9 @@ Checks: >
   -google-runtime-references,
   -llvm-header-guard,-llvmlibc-*,
   -altera-struct-pack-align,
-  -altera-unroll-loops
+  -altera-unroll-loops,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -concurrency-mt-unsafe
 WarningsAsErrors: ''
 HeaderFilterRegex: ''
 FormatStyle:     none

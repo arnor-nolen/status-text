@@ -22,4 +22,11 @@ config.h:
 
 clean:
 	rm -f status-text ${OBJ}
+	
+install: all
+	mkdir -p ${DESTDIR}${PREFIX}/bin
+	cp -f status-text ${DESTDIR}${PREFIX}/bin
+	chmod 755 ${DESTDIR}${PREFIX}/bin/status-text
 
+uninstall:
+	rm -f ${DESTDIR}${PREFIX}/bin/status-text

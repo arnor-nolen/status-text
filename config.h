@@ -16,5 +16,5 @@ task_t task_list[] = {
      "$1}'",
      0},
     {"date '+%a %F %I:%M %p'", 5},
-    {"xkblayout-state print \"%s\" | cut -c -2", 0},
+    {"cat /home/arnor/.cache/.dwl_kbd_layout", 0},
 };

@@ -23,7 +23,7 @@ You can send a signal using Linux signaling mechanism to force a command reexecu
 ```sh
 # Use 34 + command array index as a signal number.
 # This will reexecute first command and update the status text information.
-kill -34 status-text
+kill -34 $(pidof status-text)
 ```
 
 # Known limitations

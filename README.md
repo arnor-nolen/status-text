@@ -59,8 +59,7 @@ task_t task_list[] = {
 };
 ```
 
-In the example, time updates periodically, every 5 seconds.
-In the example, volume never updates by itself. It only updates when I execute one of these commands from a separate shell:
+In the example, time updates periodically, every 5 seconds, but volume never updates by itself. It only updates when I force the refresh from a separate shell:
 
 ```sh
 # Change volume through pulsemixer and send signal to status-text to update the value. Signal 37 is used because volume has an index of 3.

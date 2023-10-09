@@ -8,7 +8,8 @@ Checks: >
   -altera-struct-pack-align,
   -altera-unroll-loops,
   -cppcoreguidelines-avoid-non-const-global-variables,
-  -concurrency-mt-unsafe
+  -concurrency-mt-unsafe,
+  -altera-id-dependent-backward-branch
 WarningsAsErrors: ''
 HeaderFilterRegex: ''
 FormatStyle:     none

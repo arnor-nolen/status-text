@@ -74,7 +74,7 @@ void timer_callback(int signum) {
         task->output.position = 0;
     } else {
         task->output.position =
-            prev_task->output.position + prev_task->output.size - 1;
+            prev_task->output.position + prev_task->output.size;
     }
 
     task->subprocess = subprocess(task->command);
@@ -93,10 +93,11 @@ void timer_callback(int signum) {
     /* Read command output from the pipe. */
     str_size += read(task->subprocess.readfd,
                      status_string + task->output.position + str_size,
-                     MAX_STRING_SIZE - task->output.position - str_size);
+                     MAX_STRING_SIZE - task->output.position - str_size) -
+                1;
 
     /* Copy end delimiter. */
-    strncpy(status_string + task->output.position + str_size - 1, end_delimiter,
+    strncpy(status_string + task->output.position + str_size, end_delimiter,
             strlen(end_delimiter));
 
     str_size += strlen(end_delimiter);
@@ -105,6 +106,11 @@ void timer_callback(int signum) {
     strncpy(status_string + task->output.position + str_size, temp_string,
             MAX_STRING_SIZE - task->output.position -
                 MAX(task->output.size, str_size));
+
+    /* Update positions of all commands following this command. */
+    for (size_t i = elem_id + 1; i < LEN(task_list); ++i) {
+        task_list[i].output.position += str_size - task->output.size;
+    }
 
     task->output.size = str_size;
 

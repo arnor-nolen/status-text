@@ -8,6 +8,9 @@
 
 #define LEN(x) (sizeof(x) / sizeof(x[0]))
 
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+
 typedef struct {
     size_t position;
     size_t size;
@@ -35,6 +38,7 @@ typedef struct {
 #include "config.h"
 
 char status_string[MAX_STRING_SIZE] = "";
+char temp_string[MAX_STRING_SIZE] = "";
 
 sigset_t signal_set;
 
@@ -75,19 +79,32 @@ void timer_callback(int signum) {
 
     task->subprocess = subprocess(task->command);
 
+    /* Save everything until end of string. */
+    strncpy(temp_string,
+            status_string + task->output.position + task->output.size,
+            MAX_STRING_SIZE - task->output.position - task->output.size);
+
+    /* Copy start delimiter. */
     strncpy(status_string + task->output.position, start_delimiter,
             strlen(start_delimiter));
 
     size_t str_size = strlen(start_delimiter);
 
+    /* Read command output from the pipe. */
     str_size += read(task->subprocess.readfd,
                      status_string + task->output.position + str_size,
                      MAX_STRING_SIZE - task->output.position - str_size);
 
+    /* Copy end delimiter. */
     strncpy(status_string + task->output.position + str_size - 1, end_delimiter,
             strlen(end_delimiter));
 
     str_size += strlen(end_delimiter);
+
+    /* Restore. */
+    strncpy(status_string + task->output.position + str_size, temp_string,
+            MAX_STRING_SIZE - task->output.position -
+                MAX(task->output.size, str_size));
 
     task->output.size = str_size;
 

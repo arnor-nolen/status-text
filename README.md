@@ -26,7 +26,7 @@ You can send a signal using Linux signaling mechanism to force a command reexecu
 kill -34 $(pidof status-text)
 ```
 
-# Output example
+# Usage example
 
 Example config: 
 

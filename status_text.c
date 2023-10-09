@@ -116,6 +116,9 @@ void timer_callback(int signum) {
 
     close(task->subprocess.readfd);
 
+    int stat = 0;
+    waitpid(task->subprocess.pid, &stat, 0);
+
     printf("%s\n", status_string);
 
     /* Unblock the signals. */

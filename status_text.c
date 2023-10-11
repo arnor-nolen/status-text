@@ -1,6 +1,7 @@
 #define _GNU_SOURCE /* For pipe2(). */
 
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -42,6 +43,8 @@ char temp_string[MAX_STRING_SIZE] = "";
 
 sigset_t signal_set;
 
+bool should_skip = false;
+
 subprocess_t subprocess(const char *command) {
     int fds[2];
     pipe2(fds, O_CLOEXEC);
@@ -62,67 +65,87 @@ subprocess_t subprocess(const char *command) {
 }
 
 void timer_callback(int signum) {
-    /* Block all signals from interrupting execution. */
-    sigprocmask(SIG_BLOCK, &signal_set, NULL);
 
-    size_t elem_id = signum - SIGRTMIN;
+    /* Ignore duplicate signals that we just processed. */
+    if (!should_skip) {
 
-    task_t *task = &task_list[elem_id];
-    task_t *prev_task = &task_list[elem_id - 1];
+        /* Block all signals from interrupting execution. */
+        sigprocmask(SIG_BLOCK, &signal_set, NULL);
 
-    if (elem_id == 0U) {
-        task->output.position = 0;
+        size_t elem_id = signum - SIGRTMIN;
+
+        task_t *task = &task_list[elem_id];
+        task_t *prev_task = &task_list[elem_id - 1];
+
+        if (elem_id == 0U) {
+            task->output.position = 0;
+        } else {
+            task->output.position =
+                prev_task->output.position + prev_task->output.size;
+        }
+
+        task->subprocess = subprocess(task->command);
+
+        /* Save everything until end of string. */
+        strncpy(temp_string,
+                status_string + task->output.position + task->output.size,
+                MAX_STRING_SIZE - task->output.position - task->output.size);
+
+        /* Copy start delimiter. */
+        strncpy(status_string + task->output.position, start_delimiter,
+                strlen(start_delimiter));
+
+        size_t str_size = strlen(start_delimiter);
+
+        /* Read command output from the pipe. */
+        str_size += read(task->subprocess.readfd,
+                         status_string + task->output.position + str_size,
+                         MAX_STRING_SIZE - task->output.position - str_size) -
+                    1;
+
+        /* Copy end delimiter. */
+        strncpy(status_string + task->output.position + str_size, end_delimiter,
+                strlen(end_delimiter));
+
+        str_size += strlen(end_delimiter);
+
+        /* Restore. */
+        strncpy(status_string + task->output.position + str_size, temp_string,
+                MAX_STRING_SIZE - task->output.position -
+                    MAX(task->output.size, str_size));
+
+        /* Update positions of all commands following this command. */
+        for (size_t i = elem_id + 1; i < LEN(task_list); ++i) {
+            task_list[i].output.position += str_size - task->output.size;
+        }
+
+        task->output.size = str_size;
+
+        close(task->subprocess.readfd);
+
+        int stat = 0;
+        waitpid(task->subprocess.pid, &stat, 0);
+
+        printf("%s\n", status_string);
+    }
+
+    sigset_t pendset;
+    sigpending(&pendset);
+
+    if (sigismember(&pendset, signum)) {
+        should_skip = true;
+
+        sigset_t cursigset;
+        sigemptyset(&cursigset);
+        sigaddset(&cursigset, signum);
+
+        sigprocmask(SIG_UNBLOCK, &cursigset, NULL);
     } else {
-        task->output.position =
-            prev_task->output.position + prev_task->output.size;
+        should_skip = false;
+
+        /* Unblock the signals. */
+        sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
     }
-
-    task->subprocess = subprocess(task->command);
-
-    /* Save everything until end of string. */
-    strncpy(temp_string,
-            status_string + task->output.position + task->output.size,
-            MAX_STRING_SIZE - task->output.position - task->output.size);
-
-    /* Copy start delimiter. */
-    strncpy(status_string + task->output.position, start_delimiter,
-            strlen(start_delimiter));
-
-    size_t str_size = strlen(start_delimiter);
-
-    /* Read command output from the pipe. */
-    str_size += read(task->subprocess.readfd,
-                     status_string + task->output.position + str_size,
-                     MAX_STRING_SIZE - task->output.position - str_size) -
-                1;
-
-    /* Copy end delimiter. */
-    strncpy(status_string + task->output.position + str_size, end_delimiter,
-            strlen(end_delimiter));
-
-    str_size += strlen(end_delimiter);
-
-    /* Restore. */
-    strncpy(status_string + task->output.position + str_size, temp_string,
-            MAX_STRING_SIZE - task->output.position -
-                MAX(task->output.size, str_size));
-
-    /* Update positions of all commands following this command. */
-    for (size_t i = elem_id + 1; i < LEN(task_list); ++i) {
-        task_list[i].output.position += str_size - task->output.size;
-    }
-
-    task->output.size = str_size;
-
-    close(task->subprocess.readfd);
-
-    int stat = 0;
-    waitpid(task->subprocess.pid, &stat, 0);
-
-    printf("%s\n", status_string);
-
-    /* Unblock the signals. */
-    sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
 }
 
 int main(int argc, char *argv[]) {
